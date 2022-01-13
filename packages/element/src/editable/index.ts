@@ -1,4 +1,9 @@
-import { defineComponent, ref, onBeforeUnmount } from '@vue/composition-api'
+import {
+  defineComponent,
+  ref,
+  onBeforeUnmount,
+  Ref,
+} from '@vue/composition-api'
 import { observer } from '@formily/reactive-vue'
 import { reaction } from '@formily/reactive'
 import { isVoidField, Field } from '@formily/core'
@@ -13,9 +18,9 @@ import { composeExport } from '../__builtins__/shared'
 export type EditableProps = FormItemProps
 export type EditablePopoverProps = PopoverProps
 
-const getParentPattern = (fieldRef) => {
+const getInitialPattern = (fieldRef: Ref<Field>) => {
   const field = fieldRef.value
-  return field?.parent?.pattern || field?.form?.pattern
+  return field?.pattern
 }
 
 const getFormItemProps = (fieldRef): FormItemProps => {
@@ -42,19 +47,20 @@ const EditableInner = observer(
     name: 'FEditable',
     setup(props, { attrs, slots, refs }) {
       const fieldRef = useField<Field>()
+      const pattern = getInitialPattern(fieldRef)
 
       const prefixCls = `${stylePrefix}-editable`
       const setEditable = (payload: boolean) => {
-        const pattern = getParentPattern(fieldRef)
-
         if (pattern !== 'editable') return
         fieldRef.value.setPattern(payload ? 'editable' : 'readPretty')
       }
 
+      const resetEditable = () => {
+        fieldRef.value.setPattern(pattern)
+      }
+
       const dispose = reaction(
         () => {
-          const pattern = getParentPattern(fieldRef)
-
           return pattern
         },
         (pattern) => {
@@ -67,15 +73,17 @@ const EditableInner = observer(
         }
       )
 
-      onBeforeUnmount(dispose)
+      onBeforeUnmount(() => {
+        resetEditable()
+        dispose()
+      })
 
       return () => {
         const field = fieldRef.value
         const editable = field.pattern === 'editable'
-        const pattern = getParentPattern(fieldRef)
         const itemProps = getFormItemProps(fieldRef)
 
-        const recover = () => {
+        const closeEditable = () => {
           if (editable && !fieldRef.value?.errors?.length) {
             setEditable(false)
           }
@@ -87,7 +95,7 @@ const EditableInner = observer(
           const close = innerRef.querySelector(`.${prefixCls}-close-btn`)
 
           if (target?.contains(close) || close?.contains(target)) {
-            recover()
+            closeEditable()
           } else if (!editable) {
             setTimeout(() => {
               setEditable(true)
@@ -111,18 +119,15 @@ const EditableInner = observer(
             },
             {
               default: () => {
-                return h(
-                  'i',
-                  {
-                    class: [
-                      `${prefixCls}-edit-btn`,
-                      pattern === 'editable'
-                        ? 'el-icon-edit'
-                        : 'el-icon-chat-dot-round',
-                    ],
-                  },
-                  {}
-                )
+                return pattern === 'editable'
+                  ? h(
+                      'i',
+                      {
+                        class: [`${prefixCls}-edit-btn`, 'el-icon-edit'],
+                      },
+                      {}
+                    )
+                  : null
               },
             }
           )
@@ -202,7 +207,7 @@ const EditablePopover = observer(
 
       return () => {
         const field = fieldRef.value
-        const pattern = getParentPattern(fieldRef)
+        const pattern = getInitialPattern(fieldRef)
         return h(
           Popover,
           {
